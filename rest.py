@@ -147,14 +147,12 @@ def set_temperature():
     if not authenticate(request.args.get("APIKEY")):
         return make_error(401, "Invalid token")
 
-    mode = True if request.args["airMode"] == 'auto' else False
-    local_max = request.args["max"]
-    local_min = request.args["min"]
-    local_target = request.args["target"]
-    local_airStatus = True if request.args["airStatus"] == '1' else 0
+    mode = True if request.args["airMode"] == 'manual' else False
 
     # Modo automático
     if mode == False:
+        local_max = request.args["max"]
+        local_min = request.args["min"]
         # Avaliação do intervalo de valores válidos para a temperatura máxima
         if local_max < 17 or local_max > 23:
             return make_error(400, "Temperatura máxima fora dos limites [17,23]")
@@ -171,6 +169,8 @@ def set_temperature():
 
     # Modo manual
     else: 
+        local_target = request.args["target"]
+        local_airStatus = True if request.args["airStatus"] == '1' else 0
         # Avaliação do intervalo de valores válidos para a temperatura máxima
         if local_target < 16 or local_target > 23:
            return make_error(400, "Temperatura fora dos limites [16,23]")
