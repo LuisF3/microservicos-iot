@@ -147,7 +147,7 @@ def set_temperature():
     if not authenticate(request.args.get("APIKEY")):
         return make_error(401, "Invalid token")
 
-    mode = request.args["airMode"]
+    mode = True if request.args["airMode"] == 'auto' else False
     local_max = request.args["max"]
     local_min = request.args["min"]
     local_target = request.args["target"]
@@ -370,7 +370,7 @@ def get_air_info():
         "max": max_temp,
         "min": min_temp,
         "target":target_temp,
-        "airMode": mode,
+        "airMode": 'auto' if mode else 'manual',
         "airStatus": air_state
     }
 
@@ -384,4 +384,4 @@ def serve(path):
         return send_from_directory(app.static_folder, 'index.html')
 
 client_paho.loop_start()
-app.run(host="0.0.0.0", port=9001)
+app.run(host="0.0.0.0", port=9001, debug=True)
