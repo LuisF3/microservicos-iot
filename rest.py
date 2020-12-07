@@ -148,34 +148,35 @@ def set_temperature():
         return make_error(401, "Invalid token")
 
     mode = request.args["airMode"]
+    local_max = request.args["max"]
+    local_min = request.args["min"]
+    local_target = request.args["target"]
+    local_airStatus = True if request.args["airStatus"] == '1' else 0
 
     # Modo automático
     if mode == False:
         # Avaliação do intervalo de valores válidos para a temperatura máxima
-        if request.args["max"] < 17 or request.args["max"] > 23:
+        if local_max < 17 or local_max > 23:
             return make_error(400, "Temperatura máxima fora dos limites [17,23]")
         # Avaliação do intervalo de valores válidos para a temperatura mínima
-        if request.args["min"] < 16 or request.args["min"] > 22:
+        if local_min < 16 or local_min > 22:
             return make_error(400, "Temperatura mínima fora dos limites [16,22]")
         # Temperatura máxima não pode ser inferior à mínima
-        if request.args["max"] < request.args["min"]:
+        if local_max < local_min:
             return make_error(400, "Temperatura máxima deve ser superior à mínima")
         # Atualização dos valores armazenados na aplicação
-        min_temp = request.args["min"]
-        target_temp = request.args["min"]
-        max_temp = request.args["max"]
+        min_temp = local_min
+        target_temp = local_min
+        max_temp = local_max
 
     # Modo manual
     else: 
         # Avaliação do intervalo de valores válidos para a temperatura máxima
-        if request.args["target"] < 16 or request.args["max"] > 23:
+        if local_target < 16 or local_target > 23:
            return make_error(400, "Temperatura fora dos limites [16,23]")
         # Atualização da temperatura ideal 
-        target_temp = request.args["target"]
-        if request.args["airStatus"] == '1':
-           turn_air(True)
-        else:
-           turn_air(False)
+        target_temp = local_target
+        turn_air(local_airStatus)
 
     return {"max": max_temp, "min": min_temp, "target": target_temp, "airStatus": air_state, "airMode": mode}
 
