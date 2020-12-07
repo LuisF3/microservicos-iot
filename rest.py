@@ -1,4 +1,4 @@
-from flask import Flask, request, make_response
+from flask import Flask, request, make_response, send_from_directory
 from flask_cors import CORS
 import pymongo
 import datetime
@@ -7,6 +7,7 @@ import json
 import bcrypt
 import math
 import uuid
+import os
 
 app = Flask(__name__, static_folder='build')
 CORS(app)
@@ -97,7 +98,7 @@ client_paho = mqtt.Client()
 client_paho.on_connect = on_connect
 client_paho.on_message = on_message
 client_paho.connect("andromeda.lasdpc.icmc.usp.br", 8041, 60)
-db = pymongo.MongoClient("localhost", 27017).iot
+db = pymongo.MongoClient("localhost", 27017).team3
 
 def authenticate(token):
     global db
@@ -116,8 +117,9 @@ def turn_air(to):
     # Publica a modificação no tópico de controle do ar-condicionado
     print(
         f'{"Ligando" if to else "Desligando"} o ar condicionado na temperatura {target_temp}; min: {min_temp}; max: {max_temp};')
+    print('Publicando o seguinte json: ' + json.dumps({"0": 1, "21": 1 if to else 0, "23": 1, "s": datetime.datetime.now().strftime('%d/%m/%Y %H:%M:%S')}))
     client_paho.publish("3/aircon/30",
-                        str({"0": 1, "21": 1 if to else 0, "23": 1, "s": datetime.datetime.now().strftime('%d/%m/%Y %H:%M:%S')}), 2)
+                        json.dumps({"0": 1, "21": 1 if to else 0, "23": 1, "s": datetime.datetime.now().strftime('%d/%m/%Y %H:%M:%S')}), 2)
 
 # Estima a temperatura atual da sala 
 # @return avg: temperatura média da última coleta efetuada pelos sensores
@@ -142,33 +144,38 @@ def make_error(status_code=200, message="error"):
 def set_temperature():
     global client_paho, max_temp, min_temp, target_temp, mode, air_state
 
-    if not authenticate(request.headers.get("Authorization")):
+    if not authenticate(request.args.get("APIKEY")):
         return make_error(401, "Invalid token")
+
+    mode = request.args["airMode"]
 
     # Modo automático
     if mode == False:
         # Avaliação do intervalo de valores válidos para a temperatura máxima
-        if request.json["max"] < 17 or request.json["max"] > 23:
+        if request.args["max"] < 17 or request.args["max"] > 23:
             return make_error(400, "Temperatura máxima fora dos limites [17,23]")
         # Avaliação do intervalo de valores válidos para a temperatura mínima
-        if request.json["min"] < 16 or request.json["min"] > 22:
+        if request.args["min"] < 16 or request.args["min"] > 22:
             return make_error(400, "Temperatura mínima fora dos limites [16,22]")
         # Temperatura máxima não pode ser inferior à mínima
-        if request.json["max"] < request.json["min"]:
+        if request.args["max"] < request.args["min"]:
             return make_error(400, "Temperatura máxima deve ser superior à mínima")
         # Atualização dos valores armazenados na aplicação
-        min_temp = request.json["min"]
-        target_temp = request.json["min"]
-        max_temp = request.json["max"]
+        min_temp = request.args["min"]
+        target_temp = request.args["min"]
+        max_temp = request.args["max"]
 
     # Modo manual
     else: 
         # Avaliação do intervalo de valores válidos para a temperatura máxima
-        if request.json["target"] < 16 or request.json["max"] > 23:
-            return make_error(400, "Temperatura fora dos limites [16,23]")
+        if request.args["target"] < 16 or request.args["max"] > 23:
+           return make_error(400, "Temperatura fora dos limites [16,23]")
         # Atualização da temperatura ideal 
-        target_temp = request.json["target"]
-        turn_air(True)
+        target_temp = request.args["target"]
+        if request.args["airStatus"] == '1':
+           turn_air(True)
+        else:
+           turn_air(False)
 
     return {"max": max_temp, "min": min_temp, "target": target_temp, "airStatus": air_state, "airMode": mode}
 
@@ -178,7 +185,7 @@ def set_temperature():
 def set_manual():
     global mode
 
-    if not authenticate(request.headers.get("Authorization")):
+    if not authenticate(request.args.get("APIKEY")):
         return make_error(401, "Invalid token")
 
     if request.method == 'POST':
@@ -193,7 +200,7 @@ def set_manual():
 def temperature_avg():
     global db
 
-    if not authenticate(request.headers.get("Authorization")):
+    if not authenticate(request.args.get("APIKEY")):
         return make_error(401, "Invalid token")
 
     period = int(request.args.get('period'))
@@ -241,7 +248,6 @@ def authenticate_user():
     if user and bcrypt.checkpw(password, user['password']):
         del user['_id']
         del user['password']
-        user['token'] = str(user['token'])[2:-1]
 
         return {
             "mqtt": {
@@ -250,8 +256,6 @@ def authenticate_user():
                 "port": "9999"
             },
             "microsservice": {
-                "host": "andromeda.lasdpc.icmc.usp.br",
-                "port": "5001",
                 "APIKEY": user['token']
             }
         }
@@ -286,7 +290,7 @@ def create_user():
 def sensor_history():
     global db
 
-    if not authenticate(request.headers.get("Authorization")):
+    if not authenticate(request.args.get("APIKEY")):
         return make_error(401, "Invalid token")
 
     # Tópico do sensor não especificado
@@ -308,18 +312,18 @@ def sensor_history():
     print(now)
 
     # Tópico temperatura
-    if request.args.get('topic') == 'temp':
+    if 'temp' in request.args.get('topic'):
         query = {
             's': {'$gte': now},
         }
         # Recebe as linhas de data igual ou posterior à mínima
         results = list(db.temp_occur.find(query))
         # Calcula a média de 30 resultados em função do curto período de coleta de dados dos sensores 
-        for i in range(0, len(results), 30):
+        for i in range(0, len(results), 90):
             avg = 0
-            for j in range(i, min(i+30, len(results))):
+            for j in range(i, min(i+90, len(results))):
                 avg += results[j]['temp']
-            avg /= min(30, len(results) - i)
+            avg /= min(90, len(results) - i)
             # Atualiza valores do primeiro elemento do intervalo para facilitar a inserção posterior
             results[i]['s'] = results[i]['s'].strftime("%d/%m/%Y %H:%M:%S")
             results[i]['temp'] = avg
@@ -328,18 +332,18 @@ def sensor_history():
             results_filtered.append(results[i])
 
     # Tópico umidade
-    elif request.args.get('topic') == 'umid':
+    elif 'umid' in request.args.get('topic'):
         query = {
             's': {'$gte': now},
         }
         # Recebe as linhas de data igual ou posterior à mínima
         results = list(db.umid_occur.find(query))
         # Calcula a média de 30 resultados em função do curto período de coleta de dados dos sensores 
-        for i in range(0, len(results), 30):
+        for i in range(0, len(results), 90):
             avg = 0
-            for j in range(i, min(i+30, len(results))):
+            for j in range(i, min(i+90, len(results))):
                 avg += results[j]['umid']
-            avg /= min(30, len(results) - i)
+            avg /= min(90, len(results) - i)
             # Atualiza valores do primeiro elemento do intervalo para facilitar a inserção posterior
             results[i]['s'] = results[i]['s'].strftime("%d/%m/%Y %H:%M:%S")
             results[i]['umid'] = avg
@@ -354,11 +358,11 @@ def sensor_history():
 
 # Retorna todas as informações relacionadas ao ar-condicionado
 # @return: json contendo os valores atuais de cada parâmetro
-@app.route('/api/air-information', methods=['GET'])
+@app.route('/air-information', methods=['GET'])
 def get_air_info():
     global max_temp, min_temp, target_temp, mode, air_state
 
-    if not authenticate(request.headers.get("Authorization")):
+    if not authenticate(request.args.get("APIKEY")):
         return make_error(401, "Invalid token")
 
     return {
@@ -379,4 +383,4 @@ def serve(path):
         return send_from_directory(app.static_folder, 'index.html')
 
 client_paho.loop_start()
-app.run(port=5001)
+app.run(host="0.0.0.0", port=9001)
