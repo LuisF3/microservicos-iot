@@ -147,10 +147,10 @@ def set_temperature():
     if not authenticate(request.args.get("APIKEY")):
         return make_error(401, "Invalid token")
 
-    mode = True if request.args["airMode"] == 'manual' else False
+    mode = False if request.args["airMode"] == 'manual' else True
 
     # Modo automático
-    if mode == False:
+    if mode:
         local_max = float(request.args["max"])
         local_min = float(request.args["min"])
         # Avaliação do intervalo de valores válidos para a temperatura máxima
