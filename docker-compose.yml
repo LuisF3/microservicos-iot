@@ -1,0 +1,20 @@
+version: "3.8"
+services:
+  mongo:
+    image: mongo
+    container_name: MongoDB
+    restart: always
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: toor
+    ports: 
+      - "27017:27017"
+    expose:
+      - "27017"
+  flask:
+    build: ./
+    container_name: Flask
+    ports: 
+      - "5001:5001"
+    depends_on:
+      - mongo
