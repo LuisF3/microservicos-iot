@@ -170,7 +170,7 @@ def set_temperature():
     # Modo manual
     else: 
         local_target = float(request.args["target"])
-        local_airStatus = True if request.args["airStatus"] == '1' else 0
+        local_airStatus = True if request.args["airStatus"] == '1' else False
         # Avaliação do intervalo de valores válidos para a temperatura máxima
         if local_target < 16 or local_target > 23:
            return make_error(400, "Temperatura fora dos limites [16,23]")
