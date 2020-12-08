@@ -34,7 +34,7 @@ def on_message(client, userdata, msg):
         db.temp_occur.insert_one(cur_msg)
         avg = get_temp()
         # Caso a temperatura atual seja superior ao limite máximo especificado, liga o ar
-        if avg >= max_temp:
+        if not mode and avg >= max_temp:
             turn_air(True)
         # Caso a temperatura atual esteja próxima da ideal, desliga o ar
         elif math.isclose(avg, target_temp, abs_tol=0.5):
@@ -166,7 +166,9 @@ def set_temperature():
         min_temp = local_min
         target_temp = local_min
         max_temp = local_max
-
+        # Verifica se o novo limite superior é menor ou igual à temperatura ambiente
+        if get_temp() >= max_temp:
+            turn_air(True)
     # Modo manual
     else: 
         local_target = float(request.args["target"])
@@ -184,13 +186,15 @@ def set_temperature():
 # @return: json com o modo de controle atualizado
 @app.route('/mode', methods=['GET', 'POST'])
 def set_manual():
-    global mode
+    global mode, max_temp
 
     if not authenticate(request.args.get("APIKEY")):
         return make_error(401, "Invalid token")
 
     if request.method == 'POST':
         mode = request.json["mode"]
+        if not mode and get_temp() >= max_temp:
+            turn_air(True)
         return {"mode": mode}
     elif request.method == 'GET':
         return {"mode": mode}
