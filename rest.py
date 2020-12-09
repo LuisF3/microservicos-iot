@@ -16,7 +16,7 @@ CORS(app)
 # @param client: instância do cliente mqtt 
 # @param msg: mensagem recebida por um dos tópicos
 def on_message(client, userdata, msg):
-    global db, sensor_temp, min_temp, max_temp
+    global mode, db, sensor_temp, min_temp, max_temp
     print(msg.topic + " " + str(msg.payload))
     cur_msg = str(msg.payload.decode("utf-8"))
     cur_msg = json.loads(cur_msg)
@@ -32,13 +32,14 @@ def on_message(client, userdata, msg):
     if msg.topic.startswith("1/temp/"):
         sensor_temp[msg.topic[-2:]] = int(cur_msg["temp"])
         db.temp_occur.insert_one(cur_msg)
-        avg = get_temp()
-        # Caso a temperatura atual seja superior ao limite máximo especificado, liga o ar
-        if not mode and avg >= max_temp:
-            turn_air(True)
-        # Caso a temperatura atual esteja próxima da ideal, desliga o ar
-        elif math.isclose(avg, target_temp, abs_tol=0.5):
-            turn_air(False)
+        if not mode:
+            avg = get_temp()
+            # Caso a temperatura atual seja superior ao limite máximo especificado, liga o ar
+            if avg >= max_temp:
+                turn_air(True)
+            # Caso a temperatura atual esteja próxima da ideal, desliga o ar
+            elif math.isclose(avg, target_temp, abs_tol=0.5):
+                turn_air(False)
     # Tópico umidade
     elif msg.topic.startswith("1/umid/"):
         db.umid_occur.insert_one(cur_msg)
@@ -147,10 +148,10 @@ def set_temperature():
     if not authenticate(request.args.get("APIKEY")):
         return make_error(401, "Invalid token")
 
-    mode = False if request.args["airMode"] == 'manual' else True
+    mode = True if request.args["airMode"] == 'manual' else False
 
     # Modo automático
-    if mode:
+    if not mode:
         local_max = float(request.args["max"])
         local_min = float(request.args["min"])
         # Avaliação do intervalo de valores válidos para a temperatura máxima
